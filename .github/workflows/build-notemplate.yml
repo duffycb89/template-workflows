@@ -1,0 +1,282 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: build
+
+on:
+  push:
+    branches: [ testABC ]
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ testABC ]
+
+permissions:
+  contents: read
+
+jobs:
+
+  pre-check:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+    name: Pre-Check
+    runs-on: "ubuntu-18.04"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # TODO - Add lint testing commands.(optional) 
+      # stub holder for lint testing.
+      - name: Lint Test
+        run: |
+          echo "Hello Lint Testing!"
+
+      # TODO - Add trivy scan for file system.
+      - name: Secret Scan
+        run: |
+          echo "Hello Secret security scanning!"
+          echo "Using Trivy to scan the filesystem to ensure passwords, tokens, certificates, etc are not present."
+
+      # TODO - Add as a pre check or separate action.
+      # Preferrably this only runs when the specific file/directory changes.
+      # Can use trivy to accomplish this.
+      - name: Dockerfile Scan
+        run: |
+          echo "Hello Dockerfile security scanning!"
+          echo "Using Trivy to scan Dockerfile"
+
+      # TODO - Add as a pre check or separate action.
+      # Preferrably this only runs when the specific file/directory changes.
+      # Can use trivy to accomplish this.
+      - name: K8s Object Scan
+        run: |
+          echo "Hello K8s object (manifest or helm) security scanning!"
+  
+  build:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
+    name: Build
+    runs-on: "ubuntu-18.04"
+    needs: pre-check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # TODO - Add lint testing commands.(optional) 
+      # stub holder for lint testing.
+      - name: Unit Test
+        run: |
+          echo "Hello Unit Testing!"
+
+      - name: SAST Scan
+        run: |
+          echo "Hello SAST security scanning!"
+
+      - name: Build an image from Dockerfile
+        run: |
+          docker build -t docker.io/my-organization/my-app:${{ github.sha }} .
+
+      - name: Trivy Container Scan
+        uses: aquasecurity/trivy-action@0.2.2
+        with:
+          image-ref: 'docker.io/my-organization/my-app:${{ github.sha }}'
+          format: 'template'
+          template: '@/contrib/sarif.tpl'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Run Trivy in GitHub SBOM mode and submit results to Dependency Snapshots
+        uses: aquasecurity/trivy-action@master
+        # Pull PAT token from Github actions secrets.
+        env:
+          myPAT: ${{ secrets.GH_SEC_PAT }}
+        with:
+          scan-type: 'fs'
+          format: 'github'
+          output: 'dependency-results.sbom.json'
+          image-ref: '.'
+          github-pat: ${{ env.myPAT }}
+
+  deploy_dev:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Dev
+    environment: 'develop'
+    runs-on: "ubuntu-18.04"
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+  
+  # TODO - Template out deploys to just pass arguments for the workflow.
+  # TODO - Template workflow should assumed a QA,Stag,Prod flow when utilized.
+  # Example of approval Gates - https://cloudlumberjack.com/posts/github-actions-approvals/
+  deploy_qa:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy QA
+    environment: 'qa'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  # TODO - Template out deploys to just pass arguments for the workflow.
+  # TODO - Template workflow should assumed a QA,Stag,Prod flow when utilized.
+  # Example of approval Gates - https://cloudlumberjack.com/posts/github-actions-approvals/
+  deploy_stage_us:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Stage - United States
+    environment: 'stage-us'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  # TODO - Template out deploys to just pass arguments for the workflow.
+  # TODO - Template workflow should assumed a QA,Stag,Prod flow when utilized.
+  # Example of approval Gates - https://cloudlumberjack.com/posts/github-actions-approvals/
+  deploy_stage_eu:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Stage - Europe
+    environment: 'stage-eu'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  # TODO - Template out deploys to just pass arguments for the workflow.
+  # TODO - Template workflow should assumed a QA,Stag,Prod flow when utilized.
+  # Example of approval Gates - https://cloudlumberjack.com/posts/github-actions-approvals/
+  deploy_stage_au:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Stage - Australia
+    environment: 'stage-au'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  # TODO - Template out deploys to just pass arguments for the workflow.
+  # TODO - Template workflow should assumed a QA,Stag,Prod flow when utilized.
+  # Example of approval Gates - https://cloudlumberjack.com/posts/github-actions-approvals/
+  deploy_prod_us:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Prod - United States
+    environment: 'prod-us'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa, deploy_stage_us]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  deploy_prod_eu:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Prod - Europe
+    environment: 'prod-eu'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa, deploy_stage_eu]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
+  deploy_prod_au:
+    permissions:
+      contents: read # for actions/checkout to fetch code
+    name: Deploy Prod - Australia
+    environment: 'prod-au'
+    runs-on: "ubuntu-18.04"
+    needs: [build, deploy_dev, deploy_qa, deploy_stage_au]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # May or may not be required depending on application setup and usage.
+      - name: Get Secrets
+        run: |
+          echo "Grabbing secrets from secret store"
+
+      - name: Deploy with Helm
+        run: |
+          echo "Deploy with environment specific kubeconfig using helm package manager."
+
